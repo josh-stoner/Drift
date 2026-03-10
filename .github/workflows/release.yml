@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -18,7 +18,7 @@ jobs:
         run: brew install xcodegen
 
       - name: Select Xcode 16
-        run: sudo xcode-select -s /Applications/Xcode_16.app || sudo xcode-select -s /Applications/Xcode.app
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | tail -1)"
 
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
@@ -51,7 +51,7 @@ jobs:
           ditto -c -k --keepParent Drift.app "Drift-v${VERSION}.zip"
 
       - name: Sign with Sparkle
-        if: ${{ env.SPARKLE_KEY != '' }}
+        if: ${{ secrets.SPARKLE_EDDSA_KEY != '' }}
         env:
           SPARKLE_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
         run: |
