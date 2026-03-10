@@ -51,10 +51,13 @@ jobs:
           ditto -c -k --keepParent Drift.app "Drift-v${VERSION}.zip"
 
       - name: Sign with Sparkle
-        if: ${{ secrets.SPARKLE_EDDSA_KEY != '' }}
         env:
           SPARKLE_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
         run: |
+          if [ -z "$SPARKLE_KEY" ]; then
+            echo "No SPARKLE_EDDSA_KEY secret set — skipping Sparkle signing"
+            exit 0
+          fi
           VERSION="${GITHUB_REF_NAME#v}"
           SIGN_TOOL=$(find .spm -name "sign_update" -type f | head -1)
           if [ -n "$SIGN_TOOL" ]; then
