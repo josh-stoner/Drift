@@ -1,0 +1,107 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.app || sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+
+      - name: Resolve SPM packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Drift.xcodeproj \
+            -scheme Drift \
+            -clonedSourcePackagesDirPath .spm
+
+      - name: Build & Archive
+        run: |
+          xcodebuild archive \
+            -project Drift.xcodeproj \
+            -scheme Drift \
+            -configuration Release \
+            -archivePath build/Drift.xcarchive \
+            -clonedSourcePackagesDirPath .spm \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_STYLE=Manual \
+            ENABLE_HARDENED_RUNTIME=YES \
+            SKIP_INSTALL=NO
+
+      - name: Package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cp -R build/Drift.xcarchive/Products/Applications/Drift.app build/Drift.app
+          cd build
+          ditto -c -k --keepParent Drift.app "Drift-v${VERSION}.zip"
+
+      - name: Sign with Sparkle
+        if: ${{ env.SPARKLE_KEY != '' }}
+        env:
+          SPARKLE_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SIGN_TOOL=$(find .spm -name "sign_update" -type f | head -1)
+          if [ -n "$SIGN_TOOL" ]; then
+            echo "$SPARKLE_KEY" > /tmp/sparkle_key
+            "$SIGN_TOOL" "build/Drift-v${VERSION}.zip" -f /tmp/sparkle_key > build/signature.txt
+            rm /tmp/sparkle_key
+          fi
+
+      - name: Generate appcast
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SIG=""
+          if [ -f build/signature.txt ]; then
+            SIG=$(cat build/signature.txt)
+          fi
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/Drift-v${VERSION}.zip"
+          FILE_SIZE=$(stat -f%z "build/Drift-v${VERSION}.zip")
+
+          EDSIG=$(echo "$SIG" | grep -o 'sparkle:edSignature="[^"]*"' | cut -d'"' -f2 || echo "")
+          LENGTH=$(echo "$SIG" | grep -o 'length="[^"]*"' | cut -d'"' -f2 || echo "$FILE_SIZE")
+
+          cat > build/appcast.xml << EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <channel>
+              <title>Drift Updates</title>
+              <item>
+                <title>Version ${VERSION}</title>
+                <pubDate>$(date -R)</pubDate>
+                <sparkle:version>${VERSION}</sparkle:version>
+                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+                <enclosure
+                  url="${DOWNLOAD_URL}"
+                  sparkle:edSignature="${EDSIG}"
+                  length="${LENGTH}"
+                  type="application/octet-stream" />
+              </item>
+            </channel>
+          </rss>
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/Drift-v*.zip
+            build/appcast.xml
+          generate_release_notes: true
+          draft: false

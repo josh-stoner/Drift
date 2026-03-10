@@ -1,0 +1,27 @@
+# Xcode
+build/
+DerivedData/
+*.xcworkspace
+xcuserdata/
+*.xcuserstate
+
+# XcodeGen (regenerated)
+Drift.xcodeproj/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+.spm/
+
+# macOS
+.DS_Store
+*.dSYM
+
+# Sparkle signing key (KEEP PRIVATE)
+sparkle_private_key
+
+# Release artifacts
+release/
+*.zip
+*.dmg
+appcast.xml
