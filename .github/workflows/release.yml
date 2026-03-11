@@ -43,6 +43,25 @@ jobs:
             ENABLE_HARDENED_RUNTIME=YES \
             SKIP_INSTALL=NO
 
+      - name: Re-sign embedded frameworks
+        run: |
+          APP="build/Drift.xcarchive/Products/Applications/Drift.app"
+          # Re-sign all embedded frameworks and XPC services with ad-hoc identity
+          find "$APP/Contents/Frameworks" -type f -perm +111 -o -name "*.dylib" | while read bin; do
+            codesign --force --sign - --timestamp=none "$bin" 2>/dev/null || true
+          done
+          find "$APP/Contents/Frameworks" -name "*.framework" | while read fw; do
+            codesign --force --sign - --timestamp=none "$fw" 2>/dev/null || true
+          done
+          find "$APP/Contents/Frameworks" -name "*.xpc" | while read xpc; do
+            codesign --force --sign - --timestamp=none "$xpc" 2>/dev/null || true
+          done
+          find "$APP/Contents/Frameworks" -name "*.app" | while read app; do
+            codesign --force --sign - --timestamp=none "$app" 2>/dev/null || true
+          done
+          # Re-sign the main app last
+          codesign --force --sign - --timestamp=none "$APP"
+
       - name: Package
         run: |
           VERSION="${GITHUB_REF_NAME#v}"

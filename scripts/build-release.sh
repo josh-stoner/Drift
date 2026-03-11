@@ -49,6 +49,16 @@ if [ ! -d "$APP_PATH" ]; then
   exit 1
 fi
 
+# Re-sign embedded frameworks with ad-hoc identity (fixes Team ID mismatch)
+echo "==> Re-signing embedded frameworks..."
+find "$APP_PATH/Contents/Frameworks" -type f -perm +111 -o -name "*.dylib" | while read bin; do
+  codesign --force --sign - --timestamp=none "$bin" 2>/dev/null || true
+done
+find "$APP_PATH/Contents/Frameworks" \( -name "*.framework" -o -name "*.xpc" -o -name "*.app" \) | while read item; do
+  codesign --force --sign - --timestamp=none "$item" 2>/dev/null || true
+done
+codesign --force --sign - --timestamp=none "$APP_PATH"
+
 # Copy to release dir
 cp -R "$APP_PATH" "$BUILD_DIR/$APP_NAME.app"
 
